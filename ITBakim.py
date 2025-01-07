@@ -3,18 +3,38 @@ from tkinter import ttk, messagebox
 import pyodbc
 from tkcalendar import DateEntry
 from datetime import datetime, timedelta 
-
+from PIL import Image, ImageTk
+from ttkthemes import ThemedTk
+from tkinter import Menu, Label, SUNKEN, BOTTOM, X
 
 conn = pyodbc.connect(
     "Driver={ODBC Driver 17 for SQL Server};"
     "Server=192.168.1.15;"  
     "Database=HTSLIFE_TEST;"  
     "UID=SA;"  
-    "PWD=;",  
+    "PWD=;"
+)  
+window = ThemedTk(theme="arc")
+window.title("Periyodik Bakım Takip Listesi")
+window.geometry("1000x600")
 
+menu_bar = Menu(window)
+window.config(menu=menu_bar)
 
+file_menu = Menu(menu_bar, tearoff=0)
+menu_bar.add_cascade(label="File", menu=file_menu)
+file_menu.add_command(label="New")
+file_menu.add_command(label="Open")
+file_menu.add_command(label="Save")
+file_menu.add_separator()
+file_menu.add_command(label="Exit", command=window.quit)
+help_menu = Menu(menu_bar, tearoff=0)
+menu_bar.add_cascade(label="Help", menu=help_menu)
+help_menu.add_command(label="About")
 
-)
+status_bar = tk.Label(window, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
 
 cursor = conn.cursor()
 
@@ -28,15 +48,14 @@ ISLEM_SECENEKLERI = [
 ]
 
 
-window = tk.Tk()
-window.title("Periyodik Bakım Takip Listesi")
-window.geometry("1000x600")
+
 
 logo_path = "C:\\Users\\Muhasebe\\Desktop\\arkaplan seffaf.png"
-logo = tk.PhotoImage(file=logo_path)
+logo_image = Image.open(logo_path)
+logo_image = logo_image.resize((int(logo_image.width / 6), int(logo_image.height / 6)), Image.Resampling.LANCZOS)
+logo = ImageTk.PhotoImage(logo_image)
 logo_label = tk.Label(window, image=logo)
-logo_label.pack()
-
+logo_label.place(relx=1.0, rely=0.0, anchor='ne')
 
 button_frame = tk.Frame(window)
 button_frame.pack(pady=10)
@@ -45,10 +64,10 @@ button_frame.pack(pady=10)
 table_frame = tk.Frame(window)
 table_frame.pack(fill="both", expand=True)
 columns = [
-    "Sıra No", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi", 
+    "id", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi", 
     "Açıklama", "Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi", "Kategori", "Yapılan İşlem","Departman"
 ]
-table = ttk.Treeview(table_frame, columns=columns, show="headings", height=15)
+table = ttk.Treeview(table_frame, columns=columns, show="headings", height=35)
 
 
 for col in columns:
@@ -56,12 +75,14 @@ for col in columns:
     table.column(col, anchor="center", width=120)
 table.pack(fill="both", expand=True)
 
+yakin_bakim_title = tk.Label(window, text="Yaklaşan Bakımlar", font=("Helvetica", 18, "bold"))
+yakin_bakim_title.pack(pady=10) 
 
 yakin_bakim_frame = tk.Frame(window)
-yakin_bakim_frame.pack(fill="both", expand=True, pady=10)
+yakin_bakim_frame.pack(fill="both", expand=True, padx_=10, pady=10)
 
 yakin_columns = [
-    "Sıra No", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi", 
+    "id", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi", 
     "Açıklama", "Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi", "Kategori", "Yapılan İşlem", "Departman"
 ]
 yakin_table = ttk.Treeview(yakin_bakim_frame, columns=yakin_columns, show="headings", height=15)
@@ -69,13 +90,29 @@ yakin_table = ttk.Treeview(yakin_bakim_frame, columns=yakin_columns, show="headi
 kategori_dict = {
     "1": "Ağ",
     "2": "Yazılım",
-    "3": "Donanım"
+    "3": "Donanım",
+    "4": "Diğer"
 }
 
 islem_dict = {
-    "1": "E-mail yedekleme",
-    "2": "Doluluk Kontrolü",
-    "3": "PC fiziki temizlik veya bakım"
+    "1": "Antivirüs kontrolü",
+    "2": "İzinsiz program kontrolü",
+    "3": "Doluluk Kontrolü",
+    "4": "E-mail yedekleme",
+    "5": "PC yedekleme",
+    "6": "PC yazılım temizleme",
+    "7": "PC fiziki temizlik veya bakım",
+    "8": "Depolama Çözümleri",
+    "9": "Çevre birimleri kontrol ve bakımı",
+    "10": "Yazılım güncellemeleri",
+    "11": "Yeni yazılım eklenmesi",
+    "12": "Envanter Kontrolü(IT)",
+    "13": "Server bakımı",
+    "14": "Donanım Güncellemesi",
+    "15": "Ürün Zimmetlenmesi",
+    "16": "Windows Güncellemesi",
+    "17": "Lisans Güncellemeleri",
+    "18": "Geri Alma veya Format"
 }
 
 
@@ -105,19 +142,25 @@ def generate_sicil_no(department_number):
 
 def kategori_ve_islem_verilerini_al():
     global kategori_dict, islem_dict
-
     try:
-        
-        cursor.execute("SELECT Kategori_ID, Kategori_Adi FROM Kategoriler")
-        kategori_dict = {row[0]: row[1] for row in cursor.fetchall()}
-        print("Kategori Dict:", kategori_dict)  
-
-  
-        cursor.execute("SELECT Islem_ID, Islem_Adi FROM YapilanIslemler")
+        cursor.execute("""
+            SELECT 
+                id, 
+                CihazAdi, 
+                SicilNo, 
+                KullaniciAdi, 
+                SorumluKisi, 
+                Aciklama, 
+                SonBakimTarihi, 
+                BirSonrakiBakimTarihi, 
+                Kategori, 
+                YapilanIslem, 
+                Departman
+            FROM ITBakimListesi
+            JOIN Kategoriler ON ITBakimListesi.Kategori = Kategoriler.Kategori_Adi
+            JOIN YapilanIslemler ON ITBakimListesi.YapilanIslem = YapilanIslemler.Islem_Adi
+        """)
         rows = cursor.fetchall()
-        islem_dict = {row[0]: row[1] for row in rows}
-        print("Islem Dict:", islem_dict)  
-
     except Exception as e:
         messagebox.showerror("Hata", f"Veritabanı hatası: {e}")
 
@@ -157,7 +200,7 @@ yakin_bakim_frame = tk.Frame(window)
 yakin_bakim_frame.pack(fill="both", expand=True, pady=10)
 
 yakin_columns = [
-    "Sıra No", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi",
+    "id", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi",
     "Açıklama", "Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi", "Kategori", "Yapılan İşlem", "Departman"
 ]
 yakin_table = ttk.Treeview(yakin_bakim_frame, columns=yakin_columns, show="headings", height=15)
@@ -227,12 +270,14 @@ def veri_sil():
 
 
 
-def veriyi_guncelle():
-    selected_item = table.selection()
-    if not selected_item:
+# Define the veri_guncelle function
+def veri_guncelle():
+    selected_items = table.selection()
+    if not selected_items:
         messagebox.showwarning("Uyarı", "Lütfen güncellemek için bir veri seçin!")
         return
 
+    selected_item = selected_items[0]
     selected_data = table.item(selected_item, "values")
 
     guncelle_pencere = tk.Toplevel(window)
@@ -244,96 +289,69 @@ def veriyi_guncelle():
         "Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi", "Kategori", "Yapılan İşlem"
     ]
     entries = {}
-    departmanlar = departmanlari_al() 
 
     for idx, label_text in enumerate(labels):
         label = tk.Label(guncelle_pencere, text=label_text)
         label.grid(row=idx, column=0, padx=10, pady=5, sticky="e")
 
-        if label_text == "Departman":
-            departman_var = tk.StringVar()
-            departman_menu = ttk.Combobox(ekle_pencere, textvariable=departman_var, values=departmanlar)
-            departman_menu.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
-            entries[label_text] = departman_var
-        elif label_text == "Kategori":
-            kategori_var = tk.StringVar()
-            kategori_menu = ttk.Combobox(ekle_pencere, textvariable=kategori_var, values=list(kategori_dict.values()))
-            kategori_menu.grid(row=idx, column=1, padx=10, pady=5, sticky=  "w")
-            entries[label_text] = kategori_var
-        elif label_text == "Yapılan İşlem":
-            islem_var = tk.StringVar()
-            islem_menu = ttk.Combobox(ekle_pencere, textvariable=islem_var, values=list(islem_dict.values()))
-            islem_menu.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
-            entries[label_text] = islem_var
-        elif "Tarih" in label_text:
-            tarih_var = tk.StringVar()
-            tarih_entry = DateEntry(ekle_pencere, textvariable=tarih_var, date_pattern='yyyy/mm/dd')
-            tarih_entry.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
-            entries[label_text] = tarih_var
-        else:
-            entry = tk.Entry(ekle_pencere)
-            entry.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
-            entries[label_text] = entry
-
-def kaydet():
-    
-        kategori_adi = entries["Kategori"].get()
-        islem_adi = entries["Yapılan İşlem"].get()
-        
-        Kategori_ID = next((key for key, value in kategori_dict.items() if value == kategori_adi), None)
-        Islem_ID = next((key for key, value in islem_dict.items() if value == islem_adi), None)
-
-        guncellenmis_veri = [
-            selected_data[0],  # Sıra No
-            entries["Cihaz Adı"].get(),
-            selected_data[2],  # Sicil No değişmez
-            entries["Kullanıcı Adı"].get(),
-            entries["Sorumlu Kişi"].get(),
-            entries["Açıklama"].get(),
-            entries["Son Bakım Tarihi"].get(),
-            entries["Bir Sonraki Bakım Tarihi"].get(),
-            Kategori_ID,  # Kategori ID
-            Islem_ID,  # Yapılan İşlem ID
-            entries["Departman"].get()
-        ]
-
-        cursor.execute(""" 
-            UPDATE ITBakimListesi 
-            SET CihazAdi=?, KullaniciAdi=?, SorumluKisi=?, Aciklama=?, SonBakimTarihi=?, 
-                BirSonrakiBakimTarihi=?, Kategori=?, YapilanIslem=?, Departman=? 
-            WHERE SicilNo=?
-        """, guncellenmis_veri[1:], selected_data[2])
-        conn.commit()
-
-        messagebox.showinfo("Başarılı", "Veri başarıyla güncellendi!")
-        guncelle_pencere.destroy()
-        verileri_listele()
-
-        for idx, label_text in enumerate(labels):
-         label = tk.Label(guncelle_pencere, text=label_text)
-         label.grid(row=idx, column=0, padx=10, pady=5, sticky="e")
-
         if label_text == "Kategori":
-            kategori_var = tk.StringVar(value=selected_data[columns.index("Kategori")])
+            kategori_var = tk.StringVar(value=selected_data[8])
             kategori_menu = ttk.Combobox(guncelle_pencere, textvariable=kategori_var, values=CATEGORIES)
             kategori_menu.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
             entries[label_text] = kategori_var
         elif label_text == "Yapılan İşlem":
-            islem_var = tk.StringVar(value=selected_data[columns.index("Yapılan İşlem")])
+            islem_var = tk.StringVar(value=selected_data[9])
             islem_menu = ttk.Combobox(guncelle_pencere, textvariable=islem_var, values=ISLEM_SECENEKLERI)
             islem_menu.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
             entries[label_text] = islem_var
         elif "Tarih" in label_text:
-            tarih_var = tk.StringVar(value=selected_data[columns.index(label_text)])
+            tarih_var = tk.StringVar(value=selected_data[idx])
             tarih_entry = DateEntry(guncelle_pencere, textvariable=tarih_var, date_pattern='yyyy/mm/dd')
             tarih_entry.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
             entries[label_text] = tarih_var
         else:
             entry = tk.Entry(guncelle_pencere)
-            entry.insert(0, selected_data[columns.index(label_text)])
+            entry.insert(0, selected_data[idx])
             entry.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
             entries[label_text] = entry
-          
+
+    def kaydet():
+        updated_data = {
+            "Cihaz Adı": entries["Cihaz Adı"].get(),
+            "Kullanıcı Adı": entries["Kullanıcı Adı"].get(),
+            "Sorumlu Kişi": entries["Sorumlu Kişi"].get(),
+            "Açıklama": entries["Açıklama"].get(),
+            "Son Bakım Tarihi": entries["Son Bakım Tarihi"].get(),
+            "Bir Sonraki Bakım Tarihi": entries["Bir Sonraki Bakım Tarihi"].get(),
+            "Kategori": entries["Kategori"].get(),
+            "Yapılan İşlem": entries["Yapılan İşlem"].get()
+        }
+        print("Updated Data:", updated_data)
+
+        try:
+            cursor.execute("""
+                UPDATE ITBakimListesi
+                SET CihazAdi=?, KullaniciAdi=?, SorumluKisi=?, Aciklama=?, SonBakimTarihi=?, BirSonrakiBakimTarihi=?, Kategori=?, YapilanIslem=?
+                WHERE id=?
+            """, (
+                updated_data["Cihaz Adı"], updated_data["Kullanıcı Adı"], updated_data["Sorumlu Kişi"], updated_data["Açıklama"],
+                updated_data["Son Bakım Tarihi"], updated_data["Bir Sonraki Bakım Tarihi"], updated_data["Kategori"], updated_data["Yapılan İşlem"],
+                selected_data[0]
+            ))
+            conn.commit()
+            messagebox.showinfo("Başarılı", "Veri başarıyla güncellendi!")
+            guncelle_pencere.destroy()
+            verileri_listele()
+        except Exception as e:
+            messagebox.showerror("Hata", f"Veri güncelleme hatası: {e}")
+
+    # Add Save and Cancel buttons
+    tk.Button(guncelle_pencere, text="Kaydet", command=kaydet).grid(row=len(labels), column=0, pady=10)
+    tk.Button(guncelle_pencere, text="İptal", command=guncelle_pencere.destroy).grid(row=len(labels), column=1, pady=10)
+
+# Correct the button definition
+
+
 def filtreleme_ekrani_olustur():
     filtre_pencere = tk.Toplevel(window)
     filtre_pencere.title("Filtreleme")
@@ -511,7 +529,7 @@ filtre_button.grid(row=0, column=6, padx=10, pady=5)
 veri_sil_button = tk.Button(button_frame, text="Veri Sil", command=veri_sil)
 veri_sil_button.grid(row=0, column=2, padx=10, pady=5)
 
-veriyi_guncelle_button = tk.Button(button_frame, text="Veri Güncelle", command=veriyi_guncelle)
+veriyi_guncelle_button = tk.Button(button_frame, text="Veri Güncelle", command=veri_guncelle)
 veriyi_guncelle_button.grid(row=0, column=3, padx=10, pady=5)
 
 veri_ekle_button = tk.Button(button_frame, text="Veri Ekle", command=veri_ekle)
