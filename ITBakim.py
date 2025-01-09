@@ -85,7 +85,7 @@ yakin_columns = [
     "id", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi", 
     "Açıklama", "Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi", "Kategori", "Yapılan İşlem", "Departman"
 ]
-yakin_table = ttk.Treeview(yakin_bakim_frame, columns=yakin_columns, show="headings", height=15)
+yakin_table = ttk.Treeview(yakin_bakim_frame, columns=yakin_columns, show="headings", height=25)
 
 kategori_dict = {
     "1": "Ağ",
@@ -127,7 +127,7 @@ print(f"Kategori ID: {Kategori_ID}, Kategori Adı: {Kategori_Adi}")
 
 def departmanlari_al():
     try:
-        cursor.execute("SELECT Departman_Adi FROM Departmanlar")
+        cursor.execute("SELECT DISTINCT Departman FROM ITENVANTER")
         departmanlar = [row[0] for row in cursor.fetchall()]
         return departmanlar
     except Exception as e:
@@ -285,9 +285,10 @@ def veri_guncelle():
     guncelle_pencere.geometry("400x500")
 
     labels = [
-        "Cihaz Adı", "Kullanıcı Adı", "Sorumlu Kişi", "Açıklama",
+        "id", "Cihaz Adı","Sicil No", "Kullanıcı Adı", "Sorumlu Kişi", "Açıklama",
         "Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi", "Kategori", "Yapılan İşlem"
     ]
+    
     entries = {}
 
     for idx, label_text in enumerate(labels):
@@ -478,29 +479,43 @@ def veri_ekle():
             entry = tk.Entry(ekle_pencere)
             entry.grid(row=idx, column=1, padx=10, pady=5, sticky="w")
             entries[label_text] = entry
+
     def kaydet():
-       
+        cihaz_adi = entries["Cihaz Adı"].get()
+        kullanici_adi = entries["Kullanıcı Adı"].get()
+        sorumlu_kisi = entries["Sorumlu Kişi"].get()
+        aciklama = entries["Açıklama"].get()
+        son_bakim_tarihi = entries["Son Bakım Tarihi"].get()
+        bir_sonraki_bakim_tarihi = entries["Bir Sonraki Bakım Tarihi"].get()
+        departman = entries["Departman"].get()
         kategori_adi = entries["Kategori"].get()
         islem_adi = entries["Yapılan İşlem"].get()
 
         kategori_id = next((key for key, value in kategori_dict.items() if value == kategori_adi), None)
-        Islem_ID = next((key for key, value in islem_dict.items() if value == islem_adi), None)
+        islem_id = next((key for key, value in islem_dict.items() if value == islem_adi), None)
+
+        # Check if the name matches any existing record
+        cursor.execute("SELECT SicilNo FROM ITBakimListesi WHERE KullaniciAdi=?", (kullanici_adi,))
+        result = cursor.fetchone()
+        if result:
+            sicil_no = result[0]
+        else:
+            sicil_no = generate_sicil_no(departman)
 
         yeni_veri = [
             "",  
-            entries["Cihaz Adı"].get(),
-            generate_sicil_no(entries["Departman"].get()),
-            entries["Kullanıcı Adı"].get(),
-            entries["Sorumlu Kişi"].get(),
-            entries["Açıklama"].get(),
-            entries["Son Bakım Tarihi"].get(),
-            entries["Bir Sonraki Bakım Tarihi"].get(),
+            cihaz_adi,
+            sicil_no,
+            kullanici_adi,
+            sorumlu_kisi,
+            aciklama,
+            son_bakim_tarihi,
+            bir_sonraki_bakim_tarihi,
             kategori_id,  # Kategori ID
-            Islem_ID,  # Yapılan İşlem ID
-            entries["Departman"].get()
+            islem_id,  # Yapılan İşlem ID
+            departman
         ]
 
-     
         cursor.execute(""" 
             INSERT INTO ITBakimListesi (CihazAdi, SicilNo, KullaniciAdi, SorumluKisi, Aciklama, 
                 SonBakimTarihi, BirSonrakiBakimTarihi, Kategori, YapilanIslem, Departman)
@@ -514,7 +529,17 @@ def veri_ekle():
 
     tk.Button(ekle_pencere, text="Kaydet", command=kaydet).grid(row=len(labels), column=0, pady=10)
     tk.Button(ekle_pencere, text="İptal", command=ekle_pencere.destroy).grid(row=len(labels), column=1, pady=10)
+# Create a context menu
+context_menu = Menu(window, tearoff=0)
+context_menu.add_command(label="Refresh", command=verileri_listele)
 
+# Function to show the context menu
+def show_context_menu(event):
+    context_menu.post(event.x_root, event.y_root)
+
+# Bind the right-click event to the table to show the context menu
+table.bind("<Button-3>", show_context_menu)
+yakin_table.bind("<Button-3>", show_context_menu)
 
 verileri_listele_button = tk.Button(button_frame, text="Veri Listele", command=verileri_listele)
 verileri_listele_button.grid(row=0, column=0, padx=10, pady=5)
