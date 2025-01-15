@@ -6,6 +6,10 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageTk
 from ttkthemes import ThemedTk
 from tkinter import Menu, Label, SUNKEN, BOTTOM, X
+from ticket_manager import get_tickets, create_ticket  # Import the functions
+import os
+import sys
+
 
 conn = pyodbc.connect(
     "Driver={ODBC Driver 17 for SQL Server};"
@@ -32,11 +36,16 @@ help_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="Help", menu=help_menu)
 help_menu.add_command(label="About")
 
+
 status_bar = tk.Label(window, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W)
 status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
 
+
 cursor = conn.cursor()
+
+
+    
 
 CATEGORIES = ["Donanım", "Yazılım", "Ağ", "Diğer"]
 ISLEM_SECENEKLERI = [
@@ -47,10 +56,18 @@ ISLEM_SECENEKLERI = [
     "Windows Güncellemesi", "Lisans Güncellemeleri", "Geri Alma veya Format"
 ]
 
+if getattr(sys, 'frozen', False):
+    # Running as a bundled executable
+    script_dir = sys._MEIPASS
+else:
+    # Running in a normal Python environment
+    script_dir = os.path.dirname(__file__)
+
+logo_path = os.path.join(script_dir, "arkaplan seffaf.png")
+if not os.path.exists(logo_path):
+    raise FileNotFoundError(f"Logo image not found at path: {logo_path}")
 
 
-
-logo_path = "C:\\Users\\Muhasebe\\Desktop\\arkaplan seffaf.png"
 logo_image = Image.open(logo_path)
 logo_image = logo_image.resize((int(logo_image.width / 6), int(logo_image.height / 6)), Image.Resampling.LANCZOS)
 logo = ImageTk.PhotoImage(logo_image)
@@ -59,7 +76,6 @@ logo_label.place(relx=1.0, rely=0.0, anchor='ne')
 
 button_frame = tk.Frame(window)
 button_frame.pack(pady=10)
-
 
 table_frame = tk.Frame(window)
 table_frame.pack(fill="both", expand=True)
@@ -566,7 +582,29 @@ verileri_listele()
 yakin_bakimlari_listele()
 
 
-window.mainloop()
+
 
 print(f"Kategori ID: {Kategori_ID}, Kategori Adı: {Kategori_Adi}")
 print(f"Islem ID: {Islem_ID}, Islem Adı: {Islem_Adi}")
+
+
+if __name__ == "__main__":
+    window.mainloop()
+
+    print(f"Kategori ID: {Kategori_ID}, Kategori Adı: {Kategori_Adi}")
+    print(f"Islem ID: {Islem_ID}, Islem Adı: {Islem_Adi}")
+
+    # Test the functions
+    print(get_tickets())
+    print(create_ticket({
+        "CihazAdi": "Test Device",
+        "SicilNo": "12345",
+        "KullaniciAdi": "Test User",
+        "SorumluKisi": "Test Responsible",
+        "Aciklama": "Test Description",
+        "SonBakimTarihi": "2023-01-01",
+        "BirSonrakiBakimTarihi": "2023-12-31",
+        "Kategori": "1",
+        "YapilanIslem": "1",
+        "Departman": "IT"
+    }))
