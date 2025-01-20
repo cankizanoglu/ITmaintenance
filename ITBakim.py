@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageTk
 from ttkthemes import ThemedTk
 from tkinter import Menu, Label, SUNKEN, BOTTOM, X
-from ticket_manager import get_tickets, create_ticket  # Import the functions
 import os
 import sys
+
+
 
 
 conn = pyodbc.connect(
@@ -91,17 +92,14 @@ for col in columns:
     table.column(col, anchor="center", width=120)
 table.pack(fill="both", expand=True)
 
-yakin_bakim_title = tk.Label(window, text="Yaklaşan Bakımlar", font=("Helvetica", 18, "bold"))
-yakin_bakim_title.pack(pady=10) 
+vsb = ttk.Scrollbar(table_frame, orient="vertical", command=table.yview)
+vsb.pack(side='right', fill='y')
+hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=table.xview)
+hsb.pack(side='bottom', fill='x')
 
-yakin_bakim_frame = tk.Frame(window)
-yakin_bakim_frame.pack(fill="both", expand=True, padx_=10, pady=10)
-
-yakin_columns = [
-    "id", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi", 
-    "Açıklama", "Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi", "Kategori", "Yapılan İşlem", "Departman"
-]
-yakin_table = ttk.Treeview(yakin_bakim_frame, columns=yakin_columns, show="headings", height=25)
+# Configure the Treeview to use the scrollbars
+table.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+table.pack(fill="both", expand=True)
 
 kategori_dict = {
     "1": "Ağ",
@@ -181,111 +179,103 @@ def kategori_ve_islem_verilerini_al():
         messagebox.showerror("Hata", f"Veritabanı hatası: {e}")
 
 
-def verileri_listele():
-    
-    kategori_ve_islem_verilerini_al()
+from datetime import datetime, timedelta
 
+
+def verileri_listele():
+    kategori_ve_islem_verilerini_al()
 
     for row in table.get_children():
         table.delete(row)
 
     try:
-        cursor.execute("SELECT * FROM ITBakimListesi")
+        cursor.execute("SELECT * FROM ITBakimListesi WHERE SonBakimTarihi IS NOT NULL")
         rows = cursor.fetchall()
 
+        cursor.execute("SELECT Model, SeriNo, Kullanici, Departman, Durum FROM ITenvanter")
+        envanter_rows = cursor.fetchall()
+        envanter_items = set((row[0], row[1], row[2], row[3], row[4]) for row in envanter_rows)
+
+
+        today = datetime.now().date()
+        future_date = today + timedelta(days=30)
+
         for row in rows:
-            Kategori_ID = row[8]  
-            Islem_ID = row[9]     
+            Kategori_ID = row[8]
+            Islem_ID = row[9]
 
-            print(f"Kategori ID: {Kategori_ID}, Yapılan İşlem ID: {Islem_ID}")  
+            print(f"Kategori ID: {Kategori_ID}, Yapılan İşlem ID: {Islem_ID}")
 
-            Kategori_Adi = kategori_dict.get(Kategori_ID, "Bilinmiyor")  
-            Islem_Adi = islem_dict.get(Islem_ID, "Bilinmiyor")  
+            Kategori_Adi = kategori_dict.get(Kategori_ID, "Bilinmiyor")
+            Islem_Adi = islem_dict.get(Islem_ID, "Bilinmiyor")
 
-             
             updated_row = list(row)
-            updated_row[8] = Kategori_Adi    
-            updated_row[9] = Islem_Adi  
+            updated_row[8] = Kategori_Adi
+            updated_row[9] = Islem_Adi
             table.insert("", "end", values=updated_row)
 
-           
+            # Insert upcoming maintenance records into YaklasanBakimlar
+            
+        conn.commit()
 
     except Exception as e:
         messagebox.showerror("Hata", f"Veri listeleme hatası: {e}")
-yakin_bakim_frame = tk.Frame(window)
-yakin_bakim_frame.pack(fill="both", expand=True, pady=10)
 
-yakin_columns = [
-    "id", "Cihaz Adı", "Sicil No", "Kullanıcı Adı", "Sorumlu Kişi",
-    "Açıklama", "Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi", "Kategori", "Yapılan İşlem", "Departman"
-]
-yakin_table = ttk.Treeview(yakin_bakim_frame, columns=yakin_columns, show="headings", height=15)
+def envanter_listele():
+    print("envanter_listele called")  # Debug print
+    # Create a new window for Envanter
+    envanter_window = tk.Toplevel(window)
+    envanter_window.title("Envanter")
+    envanter_window.geometry("800x400")
 
-for col in yakin_columns:
-    yakin_table.heading(col, text=col)
-    yakin_table.column(col, anchor="center", width=120)
-yakin_table.pack(fill="both", expand=True)
-
-
-def yakin_bakimlari_listele():
-    print("yakin_bakimlari_listele called")  # Debug print
-    # Tablodaki mevcut verileri temizle
-    for row in yakin_table.get_children():
-        yakin_table.delete(row)
+    envanter_columns = [
+        "Model", "SeriNo", "Kullanici", "Departman", "Durum"
+    ]
+    envanter_table = ttk.Treeview(envanter_window, columns=envanter_columns, show='headings')
     
-    today = datetime.now().date()
-    future_date = today + timedelta(days=30)  # Örneğin, 30 gün sonraya kadar olan bakımlar
+    for col in envanter_columns:
+        envanter_table.heading(col, text=col)
+        envanter_table.column(col, width=150, anchor='w')  # Genişlik ve hizalama ayarı
+    
+    envanter_table.pack(fill=tk.BOTH, expand=True)
 
     try:
-        cursor.execute("SELECT * FROM ITBakimListesi WHERE BirSonrakiBakimTarihi BETWEEN ? AND ?", (today, future_date))
+        cursor.execute("SELECT Model, SeriNo, Kullanici, Departman, Durum FROM ITenvanter")
         rows = cursor.fetchall()
         print(f"Rows fetched: {rows}")  # Debug print
 
         for row in rows:
-            print(f"Inserting row: {row}")  # Debug print
-            yakin_table.insert("", "end", values=row)  # Tabloda her satırı ekle
+            # Ensure that the row data matches the column structure
+            if len(row) == len(envanter_columns):
+                # Strip any leading/trailing whitespace from each field
+                cleaned_row = [str(field).strip() for field in row]
+                print(f"Inserting row: {cleaned_row}")  # Debug print
+                envanter_table.insert("", "end", values=cleaned_row)  # Tabloda her satırı ekle
+            else:
+                print(f"Skipping row due to misalignment: {row}")  # Debug print
 
     except Exception as e:
         messagebox.showerror("Hata", f"Veri listeleme hatası: {e}")
 
-# Call the function on launch
-
-
-# Add the implementation for filtreleme_ekrani_olustur function
-def filtreleme_ekrani_olustur():
-    pass
 
 def veri_sil():
-    selected_items = table.selection()  # Use the correct table
-    print(f"Selected items: {selected_items}")  # Debug print
+    selected_items = table.selection()
     if not selected_items:
         messagebox.showwarning("Uyarı", "Lütfen silmek için bir veri seçin!")
         return
 
-    for item in selected_items:
-        selected_data = table.item(item, "values")
-        print(f"Selected data: {selected_data}")  # Debug print
-        sicil_no = selected_data[2]  # Use the correct index for SicilNo
+    try:
+        for selected_item in selected_items:
+            selected_data = table.item(selected_item, "values")
+            cursor.execute("DELETE FROM ITBakimListesi WHERE id = ?", (selected_data[0],))
+            table.delete(selected_item)
+        conn.commit()
+        messagebox.showinfo("Başarılı", "Seçilen veriler başarıyla silindi!")
+    except Exception as e:
+        messagebox.showerror("Hata", f"Veri silme hatası: {e}")
 
-        if not sicil_no:
-            messagebox.showwarning("Uyarı", "Seçili verinin Sicil No'su yok, bu veri silinemez!")
-            continue
-
-        if messagebox.askyesno("Silme Onayı", f"Seçili veriyi silmek istediğinize emin misiniz? {selected_data}"):
-            try:
-                cursor.execute("DELETE FROM ITBakimListesi WHERE SicilNo=?", (sicil_no,))
-                conn.commit()
-                table.delete(item)  # Remove the item from the table view
-                messagebox.showinfo("Başarılı", "Veri başarıyla silindi!")
-            except Exception as e:
-                messagebox.showerror("Hata", f"Veri silme hatası: {e}")
-
-
-    verileri_listele()  # Refresh the table view
-
-
-
-
+envanter_button = tk.Button(window, text="Envanter", command=envanter_listele)
+envanter_button.pack(pady=10)
 # Define the veri_guncelle function
 def veri_guncelle():
     selected_items = table.selection()
@@ -555,7 +545,7 @@ def show_context_menu(event):
 
 # Bind the right-click event to the table to show the context menu
 table.bind("<Button-3>", show_context_menu)
-yakin_table.bind("<Button-3>", show_context_menu)
+
 
 verileri_listele_button = tk.Button(button_frame, text="Veri Listele", command=verileri_listele)
 verileri_listele_button.grid(row=0, column=0, padx=10, pady=5)
@@ -579,7 +569,7 @@ veri_ekle_button.grid(row=0, column=4, padx=10, pady=5)
 
 
 verileri_listele()
-yakin_bakimlari_listele()
+
 
 
 
