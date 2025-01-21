@@ -90,16 +90,17 @@ table = ttk.Treeview(table_frame, columns=columns, show="headings", height=35)
 for col in columns:
     table.heading(col, text=col)
     table.column(col, anchor="center", width=120)
-table.pack(fill="both", expand=True)
 
 vsb = ttk.Scrollbar(table_frame, orient="vertical", command=table.yview)
-vsb.pack(side='right', fill='y')
 hsb = ttk.Scrollbar(table_frame, orient="horizontal", command=table.xview)
-hsb.pack(side='bottom', fill='x')
 
 # Configure the Treeview to use the scrollbars
 table.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-table.pack(fill="both", expand=True)
+
+# Pack the Treeview and scrollbars
+vsb.pack(side='right', fill='y')
+hsb.pack(side='bottom', fill='x')
+table.pack(side="left", fill='both', expand=True)
 
 kategori_dict = {
     "1": "Ağ",
@@ -221,6 +222,46 @@ def verileri_listele():
     except Exception as e:
         messagebox.showerror("Hata", f"Veri listeleme hatası: {e}")
 
+for col in columns:
+    table.heading(col, text=col, command=lambda c=col: sort_by_column(c, False))
+    table.column(col, anchor="center", width=120)
+up_arrow = "▲"
+down_arrow = "▼"
+
+def sort_by_column(col, reverse):
+    l = [(table.set(k, col), k) for k in table.get_children('')]
+    
+    try:
+        # Tarih sütunları için özel sıralama
+        if col in ["Son Bakım Tarihi", "Bir Sonraki Bakım Tarihi"]:
+            l.sort(key=lambda x: datetime.strptime(x[0], '%Y/%m/%d') if x[0] else datetime.min, reverse=reverse)
+        # Diğer sütunlar için normal sıralama
+        else:
+            l.sort(reverse=reverse)
+    except Exception as e:
+        print(f"Sıralama hatası: {e}")
+        return
+    
+    # Yeniden sıralanmış verileri tabloya yerleştir
+    for index, (val, k) in enumerate(l):
+        table.move(k, '', index)
+    
+    # Tüm sütun başlıklarından okları temizle
+    for column in columns:
+        # Orijinal metni al (ok işareti olmadan)
+        current_text = table.heading(column)['text']
+        clean_text = current_text.replace(up_arrow, '').replace(down_arrow, '').strip()
+        table.heading(column, text=clean_text)
+    
+    # Sıralanan sütuna ok işareti ekle
+    current_text = table.heading(col)['text']
+    clean_text = current_text.replace(up_arrow, '').replace(down_arrow, '').strip()
+    new_text = f"{clean_text} {down_arrow if reverse else up_arrow}"
+    table.heading(col, text=new_text)
+    
+    # Bir sonraki tıklamada ters sıralama için başlığı güncelle
+    table.heading(col, command=lambda: sort_by_column(col, not reverse))
+
 def envanter_listele():
     print("envanter_listele called")  # Debug print
     # Create a new window for Envanter
@@ -257,6 +298,54 @@ def envanter_listele():
     except Exception as e:
         messagebox.showerror("Hata", f"Veri listeleme hatası: {e}")
 
+# Pencereyi global bir değişken olarak tanımla
+envanter_window = None
+
+def envanter_penceresi_ac():
+    global envanter_window
+    if envanter_window is None or not envanter_window.winfo_exists():
+        envanter_window = tk.Toplevel(window)
+        envanter_window.title("Envanter")
+        envanter_window.geometry("800x600")
+        envanter_window.transient(window)  # Ana pencerenin üstünde tut
+        envanter_button.config(state="disabled")  # Butonu devre dışı bırak
+
+        # Pencere kapatıldığında, butonu tekrar etkinleştir
+        envanter_window.protocol("WM_DELETE_WINDOW", envanter_penceresi_kapat)
+
+        # İçeriği ekleyin
+        envanter_columns = ["Model", "SeriNo", "Kullanici", "Departman", "Durum"]
+        envanter_table = ttk.Treeview(envanter_window, columns=envanter_columns, show='headings')
+        
+        for col in envanter_columns:
+            envanter_table.heading(col, text=col)
+            envanter_table.column(col, width=150, anchor='w')
+        
+        envanter_table.pack(fill=tk.BOTH, expand=True)
+
+        try:
+            cursor.execute("SELECT Model, SeriNo, Kullanici, Departman, Durum FROM ITenvanter")
+            rows = cursor.fetchall()
+
+            for row in rows:
+                envanter_table.insert("", "end", values=row)
+
+        except Exception as e:
+            messagebox.showerror("Hata", f"Veri listeleme hatası: {e}")
+
+    else:
+        envanter_window.lift()  # Pencereyi ön plana getir
+
+def envanter_penceresi_kapat():
+    global envanter_window
+    if envanter_window is not None:
+        envanter_window.destroy()
+        envanter_window = None
+        envanter_button.config(state="normal")  # Butonu tekrar etkinleştir
+
+# Envanter butonunu tanımlayın
+envanter_button = ttk.Button(button_frame, text="Envanter", command=envanter_penceresi_ac)
+envanter_button.grid(row=0, column=7, padx=10, pady=5)
 
 def veri_sil():
     selected_items = table.selection()
@@ -274,8 +363,7 @@ def veri_sil():
     except Exception as e:
         messagebox.showerror("Hata", f"Veri silme hatası: {e}")
 
-envanter_button = tk.Button(window, text="Envanter", command=envanter_listele)
-envanter_button.pack(pady=10)
+
 # Define the veri_guncelle function
 def veri_guncelle():
     selected_items = table.selection()
@@ -357,7 +445,37 @@ def veri_guncelle():
     tk.Button(guncelle_pencere, text="İptal", command=guncelle_pencere.destroy).grid(row=len(labels), column=1, pady=10)
 
 # Correct the button definition
+def bildirim_goster(mesaj):
+    # Bildirim penceresi oluştur
+    bildirim_penceresi = tk.Toplevel(window)
+    bildirim_penceresi.title("Bildirim")
+    bildirim_penceresi.geometry("300x100")
+    
+    # Mesajı göster
+    etiket = tk.Label(bildirim_penceresi, text=mesaj, wraplength=250)
+    etiket.pack(pady=20)
+    
+    # Pencereyi otomatik kapat
+    bildirim_penceresi.after(3000, bildirim_penceresi.destroy)  # 3 saniye sonra kapanır
 
+def bakim_kontrol():
+    # Örnek kontrol: Yaklaşan bakımlar
+    bugun = datetime.now().date()
+    for item in table.get_children():
+        values = table.item(item)['values']
+        try:
+            bakim_tarihi = datetime.strptime(values[7], '%Y-%m-%d').date()
+            kalan_gun = (bakim_tarihi - bugun).days
+            if kalan_gun <= 7:
+                bildirim_goster(f"{values[1]} cihazının bakımı yaklaşıyor!")
+        except:
+            continue
+    
+    # 1 saat sonra tekrar kontrol et
+    window.after(3600000, bakim_kontrol)
+
+# Uygulama başlatıldığında bakım kontrolünü başlat
+bakim_kontrol()
 
 def filtreleme_ekrani_olustur():
     filtre_pencere = tk.Toplevel(window)
@@ -386,7 +504,7 @@ def filtreleme_ekrani_olustur():
             table.delete(row)
 
         try:
-            query = "SELECT * FROM ITBakimListesi WHERE 1=1"
+            query = "SELECT * FROM ITBakimListesi WHERE 1=1 and SonBakimTarihi Is NOT NULL"
             params = []
             
             if secilen_kategori:
@@ -444,6 +562,45 @@ def filtreleme_ekrani_olustur():
 
     tk.Button(guncelle_pencere, text="Kaydet", command=kaydet).grid(row=len(labels), column=0, pady=10)
     tk.Button(guncelle_pencere, text="İptal", command=guncelle_pencere.destroy).grid(row=len(labels), column=1, pady=10)
+
+def yaklasan_bakimlari_kontrol_et():
+    bugun = datetime.now().date()
+    yaklasan_bakimlar = []
+    
+    for item in table.get_children():
+        values = table.item(item)['values']
+        try:
+            # Tarih formatını kontrol et ve uygun şekilde dönüştür
+            tarih_str = values[7]
+            if '/' in tarih_str:  # YYYY/MM/DD formatı
+                tarih_str = tarih_str.replace('/', '-')
+            bakim_tarihi = datetime.strptime(tarih_str, '%Y-%m-%d').date()
+            kalan_gun = (bakim_tarihi - bugun).days
+            if kalan_gun > 0 and kalan_gun <= 7:  # Sadece 0'dan büyük ve 7'den küçük olanları ekle
+                yaklasan_bakimlar.append({
+                    'cihaz': values[1],
+                    'kullanici': values[3],
+                    'tarih': tarih_str,
+                    'kalan_gun': kalan_gun
+                })
+        except:
+            continue
+    
+    if yaklasan_bakimlar:
+        uyari_mesaji = "Yaklaşan Bakımlar:\n\n"
+        for bakim in yaklasan_bakimlar:
+            uyari_mesaji += f"Cihaz: {bakim['cihaz']}\n"
+            uyari_mesaji += f"Kullanıcı: {bakim['kullanici']}\n"
+            uyari_mesaji += f"Bakım Tarihi: {bakim['tarih']}\n"
+            uyari_mesaji += f"Kalan Gün: {bakim['kalan_gun']}\n\n"
+        messagebox.showwarning("Yaklaşan Bakımlar", uyari_mesaji)
+    else:
+        messagebox.showinfo("Yaklaşan Bakımlar", "Yaklaşan bakım bulunmamaktadır.")
+kontrol_button = ttk.Button(button_frame, text="Bakımları Kontrol Et", command=yaklasan_bakimlari_kontrol_et)
+kontrol_button.grid(row=0, column=5, padx=10, pady=5)
+
+
+
 
 def veri_ekle():
     ekle_pencere = tk.Toplevel(window)
