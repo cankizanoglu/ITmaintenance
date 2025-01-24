@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter import Tk, Menu, Listbox, Button, Toplevel, Label, messagebox
+
 import pyodbc
 from tkcalendar import DateEntry
 from datetime import datetime, timedelta 
@@ -8,8 +10,9 @@ from ttkthemes import ThemedTk
 from tkinter import Menu, Label, SUNKEN, BOTTOM, X
 import os
 import sys
-
-
+import csv 
+from tkinter import filedialog
+import matplotlib.pyplot as plt
 
 
 conn = pyodbc.connect(
@@ -36,7 +39,7 @@ file_menu.add_command(label="Exit", command=window.quit)
 help_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="Help", menu=help_menu)
 help_menu.add_command(label="About")
-
+# Mevcut menü tanımlamalarınızın altına ekleyin
 
 status_bar = tk.Label(window, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W)
 status_bar.pack(side=tk.BOTTOM, fill=tk.X)
@@ -262,44 +265,30 @@ def sort_by_column(col, reverse):
     # Bir sonraki tıklamada ters sıralama için başlığı güncelle
     table.heading(col, command=lambda: sort_by_column(col, not reverse))
 
-def envanter_listele():
-    print("envanter_listele called")  # Debug print
-    # Create a new window for Envanter
-    envanter_window = tk.Toplevel(window)
-    envanter_window.title("Envanter")
-    envanter_window.geometry("800x400")
+envanter_window = None
 
-    envanter_columns = [
-        "Model", "SeriNo", "Kullanici", "Departman", "Durum"
-    ]
-    envanter_table = ttk.Treeview(envanter_window, columns=envanter_columns, show='headings')
-    
-    for col in envanter_columns:
-        envanter_table.heading(col, text=col)
-        envanter_table.column(col, width=150, anchor='w')  # Genişlik ve hizalama ayarı
-    
-    envanter_table.pack(fill=tk.BOTH, expand=True)
+def envanter_penceresi_kapat():
+    global envanter_window
+    if envanter_window is not None:
+        envanter_window.destroy()
+        envanter_window = None
+    envanter_button.config(state="normal")
 
+def envanter_listele(envanter_table):
     try:
-        cursor.execute("SELECT Model, SeriNo, Kullanici, Departman, Durum FROM ITenvanter")
+        cursor.execute("SELECT Model, SeriNo, Kullanici, Departman, Durum FROM ITENVANTER")
         rows = cursor.fetchall()
-        print(f"Rows fetched: {rows}")  # Debug print
-
         for row in rows:
             # Ensure that the row data matches the column structure
-            if len(row) == len(envanter_columns):
+            if len(row) == 5:
                 # Strip any leading/trailing whitespace from each field
                 cleaned_row = [str(field).strip() for field in row]
                 print(f"Inserting row: {cleaned_row}")  # Debug print
                 envanter_table.insert("", "end", values=cleaned_row)  # Tabloda her satırı ekle
             else:
                 print(f"Skipping row due to misalignment: {row}")  # Debug print
-
     except Exception as e:
         messagebox.showerror("Hata", f"Veri listeleme hatası: {e}")
-
-# Pencereyi global bir değişken olarak tanımla
-envanter_window = None
 
 def envanter_penceresi_ac():
     global envanter_window
@@ -313,35 +302,19 @@ def envanter_penceresi_ac():
         # Pencere kapatıldığında, butonu tekrar etkinleştir
         envanter_window.protocol("WM_DELETE_WINDOW", envanter_penceresi_kapat)
 
-        # İçeriği ekleyin
-        envanter_columns = ["Model", "SeriNo", "Kullanici", "Departman", "Durum"]
+        envanter_columns = [
+            "Model", "SeriNo", "Kullanici", "Departman", "Durum"
+        ]
         envanter_table = ttk.Treeview(envanter_window, columns=envanter_columns, show='headings')
         
         for col in envanter_columns:
             envanter_table.heading(col, text=col)
-            envanter_table.column(col, width=150, anchor='w')
+            envanter_table.column(col, width=150, anchor='w')  # Genişlik ve hizalama ayarı
         
         envanter_table.pack(fill=tk.BOTH, expand=True)
 
-        try:
-            cursor.execute("SELECT Model, SeriNo, Kullanici, Departman, Durum FROM ITenvanter")
-            rows = cursor.fetchall()
-
-            for row in rows:
-                envanter_table.insert("", "end", values=row)
-
-        except Exception as e:
-            messagebox.showerror("Hata", f"Veri listeleme hatası: {e}")
-
-    else:
-        envanter_window.lift()  # Pencereyi ön plana getir
-
-def envanter_penceresi_kapat():
-    global envanter_window
-    if envanter_window is not None:
-        envanter_window.destroy()
-        envanter_window = None
-        envanter_button.config(state="normal")  # Butonu tekrar etkinleştir
+        # İçeriği ekleyin
+        envanter_listele(envanter_table)
 
 # Envanter butonunu tanımlayın
 envanter_button = ttk.Button(button_frame, text="Envanter", command=envanter_penceresi_ac)
@@ -599,9 +572,48 @@ def yaklasan_bakimlari_kontrol_et():
 kontrol_button = ttk.Button(button_frame, text="Bakımları Kontrol Et", command=yaklasan_bakimlari_kontrol_et)
 kontrol_button.grid(row=0, column=5, padx=10, pady=5)
 
+def bakim_disa_aktar():
+    try:
+        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+        if not file_path:
+            return
+        
+        # Verileri sorgula
+        cursor.execute("SELECT * FROM ITBakimListesi")
+        rows = cursor.fetchall()
+        
+        with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=';')  # Noktalı virgül ayırıcı
+            # Sütun başlıklarını yaz
+            csvwriter.writerow([desc[0] for desc in cursor.description])
+            # Satır verilerini yaz
+            csvwriter.writerows(rows)
+        
+        messagebox.showinfo("Başarılı", "Bakım geçmişi başarıyla dışa aktarıldı!")
+    except Exception as e:
+        messagebox.showerror("Hata", f"Veri dışa aktarma hatası: {e}")
 
 
 
+def bakim_ice_aktar():
+    try:
+        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        if not file_path:
+            return
+        
+        with open(file_path, newline='', encoding='utf-8') as csvfile:
+            csvreader = csv.reader(csvfile)
+            next(csvreader)  # Sütun başlıklarını atla
+            for row in csvreader:
+                cursor.execute("INSERT INTO ITBakimListesi VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", row)
+        
+        conn.commit()
+        messagebox.showinfo("Başarılı", "Bakım geçmişi başarıyla içe aktarıldı!")
+        verileri_listele()  # Verileri güncelle
+    except Exception as e:
+        messagebox.showerror("Hata", f"Veri içe aktarma hatası: {e}")
+
+# İçe aktarma butonunu tanımlayın
 def veri_ekle():
     ekle_pencere = tk.Toplevel(window)
     ekle_pencere.title("Veri Ekle")
@@ -707,11 +719,71 @@ table.bind("<Button-3>", show_context_menu)
 verileri_listele_button = tk.Button(button_frame, text="Veri Listele", command=verileri_listele)
 verileri_listele_button.grid(row=0, column=0, padx=10, pady=5)
 
+file_menu.add_command(label="İçe Aktar", command=bakim_ice_aktar)
+file_menu.add_command(label="Dışa Aktar", command=bakim_disa_aktar)
 
 filtre_button = tk.Button(button_frame, text="Filtrele", command=filtreleme_ekrani_olustur)
 filtre_button.grid(row=0, column=6, padx=10, pady=5) 
 
+departmanlar = ['Mühendislik', 'Satınalma', 'Üretim']
+ticket_sayilari = [10, 5, 8]
 
+tamamlanmis_bakimlar = []
+
+# Bakımı tamamlanmış olarak işaretleme fonksiyonu
+def bakim_tamamla():
+    selected_items = table.selection()  # Seçilen satırları al
+    if not selected_items:
+        messagebox.showwarning("Uyarı", "Lütfen tamamlanacak bir bakım seçin!")
+        return
+
+    for selected_item in selected_items:
+        bakim = table.item(selected_item, "values")  # Seçilen satırın değerlerini al
+        tamamlanmis_bakimlar.append(bakim)  # Tamamlanmış bakımlar listesine ekle
+        table.delete(selected_item)  # Seçilen satırı tablodan sil
+
+    messagebox.showinfo("Başarılı", "Seçilen bakımlar tamamlandı ve kaydedildi!")
+
+# Tamamlanmış bakımları gösteren pencere
+def tamamlanmis_bakimlari_goster():
+    pencere = Toplevel(window)
+    pencere.title("Tamamlanmış Bakımlar")
+    pencere.geometry("600x400")
+
+    tamamlanmis_table = ttk.Treeview(pencere, columns=columns, show="headings")
+    for col in columns:
+        tamamlanmis_table.heading(col, text=col)
+        tamamlanmis_table.column(col, anchor="center", width=120)
+
+    for bakim in tamamlanmis_bakimlar:
+        tamamlanmis_table.insert("", "end", values=bakim)
+
+    tamamlanmis_table.pack(fill="both", expand=True)
+
+# Menüye tamamlanmış bakımlar seçeneğini ekle
+tamamlanmis_menu = Menu(menu_bar, tearoff=0)
+menu_bar.add_cascade(label="Tamamlanmış Bakımlar", menu=tamamlanmis_menu)
+tamamlanmis_menu.add_command(label="Bakımları Görüntüle", command=tamamlanmis_bakimlari_goster)
+
+tamamla_butonu = ttk.Button(button_frame, text="Bakımı Tamamla", command=bakim_tamamla)
+tamamla_butonu.grid(row=0, column=8, padx=10, pady=5)
+
+
+#bu kısımda 
+def grafik_goster():
+    departmanlar = ['Mühendislik', 'Satınalma', 'Üretim']
+    ticket_sayilari = [10, 5, 8]
+
+    plt.bar(departmanlar, ticket_sayilari)
+    plt.xlabel('Departmanlar')
+    plt.ylabel('Ticket Sayısı')
+    plt.title('Departmanlara Göre Ticket Dağılımı')
+    plt.show()
+
+analiz_menu = Menu(menu_bar, tearoff=0)
+menu_bar.add_cascade(label="Analizler", menu=analiz_menu)
+analiz_menu.add_command(label="Grafiği Göster", command=grafik_goster)
+#analizler kısmı burada bitiyor
 
 
 veri_sil_button = tk.Button(button_frame, text="Veri Sil", command=veri_sil)
@@ -742,7 +814,7 @@ if __name__ == "__main__":
     print(f"Islem ID: {Islem_ID}, Islem Adı: {Islem_Adi}")
 
     # Test the functions
-    print(get_tickets())
+    print(tickets())
     print(create_ticket({
         "CihazAdi": "Test Device",
         "SicilNo": "12345",
